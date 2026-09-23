@@ -1,0 +1,8 @@
+export type Eventdocument = {
+    owner: string;
+    title: string;
+    startsAt: Date;
+    endsAt: Date;
+    description?: string;
+    venue?: string;
+};
