@@ -19,6 +19,7 @@ import {
   type ListEventInput,
   type PatchEventInput,
 } from "../../event/event-service.js";
+import { UserLock } from "../../event/user-lock.js";
 import { HttpError } from "../../plugins/sensible.js";
 
 function parseObjectId(id: string): ObjectId | undefined {
@@ -84,8 +85,10 @@ const events: FastifyPluginAsync = async (
 ): Promise<void> => {
   let service: EventService;
   fastify.addHook("onReady", async () => {
+    const userLock = new UserLock();
     service = createEventService(
       createEventRepository(fastify.collections.events),
+      userLock,
     );
   });
 

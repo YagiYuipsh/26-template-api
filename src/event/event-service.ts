@@ -6,6 +6,7 @@ import type {
   EventRepository,
   EventUpdate,
 } from "./event-repository.js";
+import { UserLock } from "./user-lock.js";
 
 export type CreateEventInput = {
   title: string;
@@ -127,26 +128,31 @@ export interface EventService {
   remove(owner: string, id: string | ObjectId): Promise<void>;
 }
 
-export function createEventService(repository: EventRepository): EventService {
+export function createEventService(
+  repository: EventRepository,
+  userLock = new UserLock(),
+): EventService {
   async function create(owner: string, input: CreateEventInput) {
-    const document = toCreateDocument(owner, input);
-    const conflict = await repository.findOverlapping(
-      owner,
-      document.startsAt,
-      document.endsAt,
-    );
-    if (conflict) throwConflict(conflict.title);
-
-    try {
-      return await repository.insert(document);
-    } catch (error) {
-      if (error instanceof EventServiceError) throw error;
-      throw new EventServiceError(
-        "EVENT_CREATE_FAILED",
-        "Event was not created",
-        undefined,
+    return userLock.run(owner, async () => {
+      const document = toCreateDocument(owner, input);
+      const conflict = await repository.findOverlapping(
+        owner,
+        document.startsAt,
+        document.endsAt,
       );
-    }
+      if (conflict) throwConflict(conflict.title);
+
+      try {
+        return await repository.insert(document);
+      } catch (error) {
+        if (error instanceof EventServiceError) throw error;
+        throw new EventServiceError(
+          "EVENT_CREATE_FAILED",
+          "Event was not created",
+          undefined,
+        );
+      }
+    });
   }
 
   async function get(owner: string, id: string | ObjectId) {
@@ -196,52 +202,57 @@ export function createEventService(repository: EventRepository): EventService {
     id: string | ObjectId,
     input: PatchEventInput,
   ) {
-    const current = await get(owner, id);
-    const startsAt =
-      input.startsAt === undefined
-        ? current.startsAt
-        : parseDate(
-            input.startsAt,
-            "INVALID_START_DATE",
-            "Invalid start date in request",
-          );
-    const endsAt =
-      input.endsAt === undefined
-        ? current.endsAt
-        : parseDate(
-            input.endsAt,
-            "INVALID_END_DATE",
-            "Invalid end date in request",
-          );
-    validateTimeRange(startsAt, endsAt);
+    return userLock.run(owner, async () => {
+      const current = await get(owner, id);
+      const startsAt =
+        input.startsAt === undefined
+          ? current.startsAt
+          : parseDate(
+              input.startsAt,
+              "INVALID_START_DATE",
+              "Invalid start date in request",
+            );
+      const endsAt =
+        input.endsAt === undefined
+          ? current.endsAt
+          : parseDate(
+              input.endsAt,
+              "INVALID_END_DATE",
+              "Invalid end date in request",
+            );
+      validateTimeRange(startsAt, endsAt);
 
-    const normalizedTitle = input.title?.trim();
-    const changes: EventUpdate = {
-      ...(normalizedTitle ? { title: normalizedTitle } : {}),
-      ...(input.startsAt === undefined ? {} : { startsAt }),
-      ...(input.endsAt === undefined ? {} : { endsAt }),
-      ...(input.description === undefined
-        ? {}
-        : { description: input.description }),
-      ...(input.venue === undefined ? {} : { venue: input.venue }),
-    };
-    if (Object.keys(changes).length === 0) {
-      throw new EventServiceError("NO_FIELDS_TO_UPDATE", "No fields to update");
-    }
+      const normalizedTitle = input.title?.trim();
+      const changes: EventUpdate = {
+        ...(normalizedTitle ? { title: normalizedTitle } : {}),
+        ...(input.startsAt === undefined ? {} : { startsAt }),
+        ...(input.endsAt === undefined ? {} : { endsAt }),
+        ...(input.description === undefined
+          ? {}
+          : { description: input.description }),
+        ...(input.venue === undefined ? {} : { venue: input.venue }),
+      };
+      if (Object.keys(changes).length === 0) {
+        throw new EventServiceError(
+          "NO_FIELDS_TO_UPDATE",
+          "No fields to update",
+        );
+      }
 
-    const conflict = await repository.findOverlapping(
-      owner,
-      startsAt,
-      endsAt,
-      id,
-    );
-    if (conflict) throwConflict(conflict.title);
+      const conflict = await repository.findOverlapping(
+        owner,
+        startsAt,
+        endsAt,
+        id,
+      );
+      if (conflict) throwConflict(conflict.title);
 
-    const updated = await repository.update(owner, id, changes);
-    if (updated === null) {
-      throw new EventServiceError("EVENT_NOT_FOUND", "Event not found");
-    }
-    return updated;
+      const updated = await repository.update(owner, id, changes);
+      if (updated === null) {
+        throw new EventServiceError("EVENT_NOT_FOUND", "Event not found");
+      }
+      return updated;
+    });
   }
 
   async function remove(owner: string, id: string | ObjectId) {
