@@ -21,6 +21,11 @@ function eventBody(start: string, end: string) {
   };
 }
 
+function eventMetadata() {
+  const now = new Date();
+  return { version: 1, createdAt: now, updatedAt: now };
+}
+
 function createEvent(start: string, end: string, username = "alice") {
   return app.inject({
     method: "POST",
@@ -135,6 +140,42 @@ test("updating an event excludes itself from the conflict check", async () => {
   assert.equal(result.json().title, "Renamed meeting");
 });
 
+test("rejects a whitespace-only title as an empty update", async () => {
+  const before = await app.inject({
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+  });
+  assert.equal(before.statusCode, 200, before.payload);
+
+  const result = await app.inject({
+    method: "PATCH",
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+    payload: { title: "   " },
+  });
+  assert.equal(result.statusCode, 400, result.payload);
+  assert.equal(result.json().message, "No fields to update");
+
+  const after = await app.inject({
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+  });
+  assert.equal(after.statusCode, 200, after.payload);
+  assert.deepEqual(after.json(), before.json());
+});
+
+test("ignores a whitespace-only title when updating another field", async () => {
+  const result = await app.inject({
+    method: "PATCH",
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+    payload: { title: "   ", venue: "Room 101" },
+  });
+  assert.equal(result.statusCode, 200, result.payload);
+  assert.equal(result.json().title, "Meeting");
+  assert.equal(result.json().venue, "Room 101");
+});
+
 test("another user's event does not block an update", async () => {
   const created = await createEvent("12:00", "13:00", "bob");
   assert.equal(created.statusCode, 201, created.payload);
@@ -197,6 +238,7 @@ test("time filtering includes events starting on the previous day", async () => 
     title: "Overnight event",
     startsAt: new Date("2026-09-23T23:00:00Z"),
     endsAt: new Date("2026-09-24T09:00:00Z"),
+    ...eventMetadata(),
   });
   const result = await listEvents({
     from: "2026-09-24T00:00:00Z",
@@ -258,6 +300,7 @@ test("title search treats regular-expression characters as literal text", async 
     title: "Literal .* [team] (draft) C++ $5 ^start end? {2} A|B C:\\Temp",
     startsAt: new Date("2026-09-24T12:00:00Z"),
     endsAt: new Date("2026-09-24T13:00:00Z"),
+    ...eventMetadata(),
   });
   for (const title of [".*", "[team]", "(draft)", "C++", "$5", "^start", "?", "{2}", "A|B", "C:\\Temp"]) {
     const result = await listEvents({ title });
@@ -276,6 +319,7 @@ test("title search supports Chinese keywords", async () => {
     title: "项目讨论",
     startsAt: new Date("2026-09-24T12:00:00Z"),
     endsAt: new Date("2026-09-24T13:00:00Z"),
+    ...eventMetadata(),
   });
   const result = await listEvents({ title: "讨论" });
   assert.equal(result.statusCode, 200, result.payload);
@@ -297,6 +341,7 @@ test("title search combines with time filters and preserves ownership and orderi
     title: "Lunch",
     startsAt: new Date("2026-09-24T11:00:00Z"),
     endsAt: new Date("2026-09-24T11:30:00Z"),
+    ...eventMetadata(),
   });
 
   const result = await listEvents({

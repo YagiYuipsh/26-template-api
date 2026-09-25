@@ -31,7 +31,10 @@ test("the example collection roundtrips documents in the in-memory MongoDB", asy
     owner: "Ken",
     title: "Do technical test",
     startsAt: new Date("2026-09-23T20:00:00Z"),
-    endsAt: new Date("2026-09-23T21:00:00Z") 
+    endsAt: new Date("2026-09-23T21:00:00Z"),
+    version: 1,
+    createdAt: new Date("2026-09-23T19:00:00Z"),
+    updatedAt: new Date("2026-09-23T19:00:00Z"),
   });
   const found = await app.collections.events.findOne({
     _id: inserted.insertedId,

@@ -5,4 +5,7 @@ export type Eventdocument = {
     endsAt: Date;
     description?: string;
     venue?: string;
+    version: number;
+    createdAt: Date;
+    updatedAt: Date;
 };

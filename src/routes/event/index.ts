@@ -13,6 +13,9 @@ const EventResponse = Type.Object({
   endsAt: Type.String({ format: "date-time" }),
   description: Type.Optional(Type.String()),
   venue: Type.Optional(Type.String()),
+  version: Type.Integer({ minimum: 1 }),
+  createdAt: Type.String({ format: "date-time" }),
+  updatedAt: Type.String({ format: "date-time" }),
 }, { $id: "EventResponse" });
 // response structure of Event list 
 const EventListResponse = Type.Array(EventResponse);
@@ -63,6 +66,9 @@ function toResponse(event: {
   endsAt: Date;
   description?: string;
   venue?: string;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
 }) {
   return {
     id: event._id.toHexString(),
@@ -72,6 +78,9 @@ function toResponse(event: {
     endsAt: event.endsAt.toISOString(),
     ...(event.description === undefined ? {} : { description: event.description }),
     ...(event.venue === undefined ? {} : { venue: event.venue }),
+    version: event.version,
+    createdAt: event.createdAt.toISOString(),
+    updatedAt: event.updatedAt.toISOString(),
   };
 }
 
@@ -155,6 +164,7 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox): Promise<void
         response: { 201: EventResponse, 400: HttpError, 409: HttpError },
       },
     }, async (request, reply) => {
+
       const startsAt = new Date(request.body.startsAt);
       const endsAt = new Date(request.body.endsAt);
       if (startsAt >= endsAt) return reply.badRequest("Invalid time duration");
@@ -162,16 +172,25 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox): Promise<void
       const conflict = await findConflict(request.user.username, startsAt, endsAt);
       if (conflict) return reply.conflict(`This time overlaps with ${conflict.title}`);
 
+      const now = new Date();
+
       const document = {
         owner: request.user.username,
         title: request.body.title,
         startsAt,
         endsAt,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
         ...(request.body.description === undefined ? {} : { description: request.body.description }),
         ...(request.body.venue === undefined ? {} : { venue: request.body.venue }),
+
       };
       const result = await fastify.collections.events.insertOne(document);
-      const event = await fastify.collections.events.findOne({ _id: result.insertedId });
+      const event = await fastify.collections.events.findOne({
+        _id: result.insertedId,
+        owner: request.user.username,
+      });
       if (!event) return reply.internalServerError("Event was not created");
       return reply.code(201).send(toResponse(event));
     });
@@ -195,21 +214,27 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox): Promise<void
       const body = request.body;
       const startsAt = body.startsAt === undefined ? current.startsAt : new Date(body.startsAt);
       const endsAt = body.endsAt === undefined ? current.endsAt : new Date(body.endsAt);
-      if (startsAt >= endsAt) return reply.badRequest("startsAt must be before endsAt");
+      if (startsAt >= endsAt) return reply.badRequest("Invalid time duration");
 
-      const update = {
-        ...(body.title === undefined ? {} : { title: body.title }),
+      const normalizedTitle = body.title?.trim();
+      const changes = {
+        ...(normalizedTitle ? { title: normalizedTitle } : {}),
         ...(body.startsAt === undefined ? {} : { startsAt }),
         ...(body.endsAt === undefined ? {} : { endsAt }),
         ...(body.description === undefined ? {} : { description: body.description }),
         ...(body.venue === undefined ? {} : { venue: body.venue }),
       };
-      if (Object.keys(update).length === 0) return reply.badRequest("No fields to update");
+      if (Object.keys(changes).length === 0) return reply.badRequest("No fields to update");
+
+      const update = {
+        ...changes,
+        updatedAt: new Date(),
+      };
 
       const conflict = await findConflict(request.user.username, startsAt, endsAt, eventId);
       if (conflict) return reply.conflict(`This time overlaps with ${conflict.title}`);
 
-      await fastify.collections.events.updateOne({ _id: eventId, owner: request.user.username }, { $set: update });
+      await fastify.collections.events.updateOne({ _id: eventId, owner: request.user.username }, { $set: update, $inc: { version: 1 } });
       const updated = await fastify.collections.events.findOne({ _id: eventId, owner: request.user.username });
       if (!updated) return reply.notFound("Event not found");
       return toResponse(updated);
