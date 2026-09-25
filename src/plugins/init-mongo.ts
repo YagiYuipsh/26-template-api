@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import type { Collection, Document } from "mongodb";
 import packageJson from "../../package.json" with { type: "json" };
-import type { Eventdocument } from "../event/event"
+import type { EventDocument } from "../event/event"
 
 /**
  * Options for {@link resolveMongoUri} and {@link mongoPlugin}.
@@ -183,7 +183,7 @@ export default fp<InitMongoPluginOptions>(async (fastify, opts) => {
         "MongoDB database handle is unavailable; mongoPlugin did not connect. Check MONGO_URI and the MongoDB server.",
       );
     }
-    const events = db.collection<Eventdocument>("events");
+    const events = db.collection<EventDocument>("events");
     await events.createIndex({ owner: 1, startsAt: 1 });
     fastify.decorate("collections", { events });
   });
@@ -192,7 +192,7 @@ export default fp<InitMongoPluginOptions>(async (fastify, opts) => {
 declare module "fastify" {
   export interface FastifyInstance {
     collections: {
-      events: Collection<Eventdocument>;
+      events: Collection<EventDocument>;
     };
   }
 }

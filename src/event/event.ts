@@ -1,4 +1,4 @@
-export type Eventdocument = {
+export type EventDocument = {
     owner: string;
     title: string;
     startsAt: Date;

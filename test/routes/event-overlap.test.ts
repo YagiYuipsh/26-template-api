@@ -3,7 +3,7 @@ import * as assert from "node:assert";
 import Fastify from "fastify";
 import { MongoClient } from "mongodb";
 import { MongoMemoryServer } from "mongodb-memory-server";
-import type { Eventdocument } from "../../src/event/event.js";
+import type { EventDocument } from "../../src/event/event.js";
 import AuthPlugin from "../../src/plugins/auth.js";
 import Sensible from "../../src/plugins/sensible.js";
 import Events from "../../src/routes/event/index.js";
@@ -47,7 +47,7 @@ beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   client = await new MongoClient(mongod.getUri()).connect();
   app.decorate("collections", {
-    events: client.db("event-overlap-test").collection<Eventdocument>("events"),
+    events: client.db("event-overlap-test").collection<EventDocument>("events"),
   });
   await app.register(AuthPlugin, {
     users: [
