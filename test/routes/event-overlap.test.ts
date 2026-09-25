@@ -139,7 +139,7 @@ test.each([
     method: "PATCH",
     url: `/event/${created.json().id}`,
     headers: { authorization: "Bearer event-test-alice" },
-    payload,
+    payload: { ...payload, version: created.json().version },
   });
   assert.equal(result.statusCode, 409, result.payload);
   assert.equal(result.json().message, "This time overlaps with Meeting");
@@ -152,14 +152,53 @@ test.each([
 });
 
 test("updating an event excludes itself from the conflict check", async () => {
+  const before = await app.inject({
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+  });
   const result = await app.inject({
     method: "PATCH",
     url: `/event/${existingId}`,
     headers: { authorization: "Bearer event-test-alice" },
-    payload: { title: "Renamed meeting" },
+    payload: { version: before.json().version, title: "Renamed meeting" },
   });
   assert.equal(result.statusCode, 200, result.payload);
   assert.equal(result.json().title, "Renamed meeting");
+});
+
+test("rejects a PATCH with a stale version", async () => {
+  const before = await app.inject({
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+  });
+  assert.equal(before.statusCode, 200, before.payload);
+
+  const first = await app.inject({
+    method: "PATCH",
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+    payload: { version: before.json().version, title: "First update" },
+  });
+  assert.equal(first.statusCode, 200, first.payload);
+
+  const stale = await app.inject({
+    method: "PATCH",
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+    payload: { version: before.json().version, title: "Stale update" },
+  });
+  assert.equal(stale.statusCode, 409, stale.payload);
+  assert.equal(stale.json().message, "Event was modified by another request");
+});
+
+test("requires a version for PATCH requests", async () => {
+  const result = await app.inject({
+    method: "PATCH",
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+    payload: { title: "Missing version" },
+  });
+  assert.equal(result.statusCode, 400, result.payload);
 });
 
 test("rejects a whitespace-only title as an empty update", async () => {
@@ -173,7 +212,7 @@ test("rejects a whitespace-only title as an empty update", async () => {
     method: "PATCH",
     url: `/event/${existingId}`,
     headers: { authorization: "Bearer event-test-alice" },
-    payload: { title: "   " },
+    payload: { version: before.json().version, title: "   " },
   });
   assert.equal(result.statusCode, 400, result.payload);
   assert.equal(result.json().message, "No fields to update");
@@ -187,11 +226,15 @@ test("rejects a whitespace-only title as an empty update", async () => {
 });
 
 test("ignores a whitespace-only title when updating another field", async () => {
+  const before = await app.inject({
+    url: `/event/${existingId}`,
+    headers: { authorization: "Bearer event-test-alice" },
+  });
   const result = await app.inject({
     method: "PATCH",
     url: `/event/${existingId}`,
     headers: { authorization: "Bearer event-test-alice" },
-    payload: { title: "   ", venue: "Room 101" },
+    payload: { version: before.json().version, title: "   ", venue: "Room 101" },
   });
   assert.equal(result.statusCode, 200, result.payload);
   assert.equal(result.json().title, "Meeting");
@@ -205,7 +248,7 @@ test("another user's event does not block an update", async () => {
     method: "PATCH",
     url: `/event/${created.json().id}`,
     headers: { authorization: "Bearer event-test-bob" },
-    payload: eventBody("10:00", "11:00"),
+    payload: { ...eventBody("10:00", "11:00"), version: created.json().version },
   });
   assert.equal(result.statusCode, 200, result.payload);
   assert.equal(result.json().owner, "bob");

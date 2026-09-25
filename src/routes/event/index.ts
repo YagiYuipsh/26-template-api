@@ -73,6 +73,8 @@ function sendServiceError(
       return reply.badRequest(error.message);
     case "EVENT_NOT_FOUND":
       return reply.notFound(error.message);
+    case "EVENT_VERSION_CONFLICT":
+      return reply.conflict(error.message);
     case "EVENT_CONFLICT":
       return reply.conflict(error.message);
     case "EVENT_CREATE_FAILED":

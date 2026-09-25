@@ -30,7 +30,12 @@ export const EventBody = Type.Object({
 });
 
 /** Request body used when partially updating an event. */
-export const EventPatchBody = Type.Partial(EventBody);
+export const EventPatchBody = Type.Intersect([
+  Type.Object({
+    version: Type.Integer({ minimum: 1 }),
+  }),
+  Type.Partial(EventBody),
+]);
 
 /** Path parameters used by event endpoints addressing a single event. */
 export const EventParams = Type.Object({ id: Type.String({ minLength: 1 }) });

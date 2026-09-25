@@ -16,7 +16,9 @@ export type CreateEventInput = {
   venue?: string;
 };
 
-export type PatchEventInput = Partial<CreateEventInput>;
+export type PatchEventInput = Partial<CreateEventInput> & {
+  version: number;
+};
 
 export type ListEventInput = {
   title?: string;
@@ -31,6 +33,7 @@ export type EventServiceErrorCode =
   | "INVALID_TIME_RANGE"
   | "NO_FIELDS_TO_UPDATE"
   | "EVENT_NOT_FOUND"
+  | "EVENT_VERSION_CONFLICT"
   | "EVENT_CONFLICT"
   | "EVENT_CREATE_FAILED";
 
@@ -204,6 +207,12 @@ export function createEventService(
   ) {
     return userLock.run(owner, async () => {
       const current = await get(owner, id);
+      if (current.version !== input.version) {
+        throw new EventServiceError(
+          "EVENT_VERSION_CONFLICT",
+          "Event was modified by another request",
+        );
+      }
       const startsAt =
         input.startsAt === undefined
           ? current.startsAt
@@ -247,9 +256,17 @@ export function createEventService(
       );
       if (conflict) throwConflict(conflict.title);
 
-      const updated = await repository.update(owner, id, changes);
+      const updated = await repository.update(
+        owner,
+        id,
+        input.version,
+        changes,
+      );
       if (updated === null) {
-        throw new EventServiceError("EVENT_NOT_FOUND", "Event not found");
+        throw new EventServiceError(
+          "EVENT_VERSION_CONFLICT",
+          "Event was modified by another request",
+        );
       }
       return updated;
     });

@@ -21,6 +21,7 @@ export interface EventRepository {
   update(
     owner: string,
     id: string | ObjectId,
+    expectedVersion: number,
     changes: EventUpdate,
   ): Promise<EventRecord | null>;
   delete(owner: string, id: string | ObjectId): Promise<boolean>;
@@ -74,12 +75,13 @@ export function createEventRepository(
   async function update(
     owner: string,
     id: string | ObjectId,
+    expectedVersion: number,
     changes: EventUpdate,
   ) {
     const objectId = toObjectId(id);
     if (objectId === null) return null;
     const result = await collection.updateOne(
-      { _id: objectId, owner },
+      { _id: objectId, owner, version: expectedVersion },
       { $set: { ...changes, updatedAt: new Date() }, $inc: { version: 1 } },
     );
     if (result.matchedCount === 0) return null;
