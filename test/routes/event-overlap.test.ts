@@ -420,3 +420,60 @@ test("title search combines with time filters and preserves ownership and orderi
     [existingId, later.json().id],
   );
 });
+
+test("event export returns an authenticated iCalendar document", async () => {
+  const result = await app.inject({
+    url: "/event/export.ics",
+    headers: { authorization: "Bearer event-test-alice" },
+  });
+
+  assert.equal(result.statusCode, 200, result.payload);
+  assert.match(result.headers["content-type"] ?? "", /^text\/calendar; charset=utf-8/);
+  assert.equal(result.headers["content-disposition"], 'attachment; filename="events.ics"');
+  assert.match(result.payload, /^BEGIN:VCALENDAR\r\n/);
+  assert.match(result.payload, /PRODID:-\/\/USThing\/\/EVENT API\/\/EN\r\n/);
+  assert.match(result.payload, /UID:[a-f0-9]{24}@event-api\r\n/);
+  assert.match(result.payload, /BEGIN:VEVENT\r\n/);
+  assert.match(result.payload, /SUMMARY:Meeting\r\n/);
+  assert.match(result.payload, /END:VCALENDAR\r\n$/);
+});
+
+test("event export applies filters and does not include another owner's events", async () => {
+  const otherUser = await createEvent("12:00", "13:00", "bob");
+  assert.equal(otherUser.statusCode, 201, otherUser.payload);
+
+  const result = await app.inject({
+    url: "/event/export.ics?from=2026-09-24T09:30:00Z&to=2026-09-24T11:30:00Z",
+    headers: { authorization: "Bearer event-test-alice" },
+  });
+
+  assert.equal(result.statusCode, 200, result.payload);
+  assert.equal((result.payload.match(/BEGIN:VEVENT/g) ?? []).length, 1);
+  assert.doesNotMatch(result.payload, /12:00/);
+});
+
+test("event export escapes text and folds long UTF-8 lines", async () => {
+  await app.collections.events.insertOne({
+    owner: "alice",
+    title: `${"会议".repeat(60)},;\\`,
+    startsAt: new Date("2026-09-24T12:00:00Z"),
+    endsAt: new Date("2026-09-24T13:00:00Z"),
+    description: "line 1\nline 2",
+    venue: "Room, A; B",
+    ...eventMetadata(),
+  });
+
+  const result = await app.inject({
+    url: "/event/export.ics",
+    headers: { authorization: "Bearer event-test-alice" },
+  });
+
+  assert.equal(result.statusCode, 200, result.payload);
+  assert.match(result.payload, /SUMMARY:/);
+  assert.match(result.payload, /\\,\\;\\\\/);
+  assert.match(result.payload, /DESCRIPTION:line 1\\nline 2/);
+  assert.match(result.payload, /LOCATION:Room\\, A\\; B/);
+  for (const line of result.payload.split("\r\n").filter(Boolean)) {
+    assert.ok(Buffer.byteLength(line, "utf8") <= 75, line);
+  }
+});

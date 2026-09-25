@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { EventDocument } from "./event.js";
+import { serializeIcs } from "./ical-service.js";
 import type {
   EventListFilters,
   EventRecord,
@@ -25,6 +26,9 @@ export type ListEventInput = {
   from?: string;
   to?: string;
 };
+
+/** Options accepted by the calendar export, matching the event list query. */
+export type EventExportInput = ListEventInput;
 
 export type EventServiceErrorCode =
   | "INVALID_TITLE"
@@ -123,6 +127,7 @@ export interface EventService {
   create(owner: string, input: CreateEventInput): Promise<EventRecord>;
   get(owner: string, id: string | ObjectId): Promise<EventRecord>;
   list(owner: string, input?: ListEventInput): Promise<EventRecord[]>;
+  exportIcs(owner: string, input?: EventExportInput): Promise<string>;
   update(
     owner: string,
     id: string | ObjectId,
@@ -198,6 +203,10 @@ export function createEventService(
       to,
     };
     return repository.list(owner, filters);
+  }
+
+  async function exportIcs(owner: string, input: EventExportInput = {}) {
+    return serializeIcs(await list(owner, input));
   }
 
   async function update(
@@ -279,5 +288,5 @@ export function createEventService(
     }
   }
 
-  return { create, get, list, update, remove };
+  return { create, get, list, exportIcs, update, remove };
 }

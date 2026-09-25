@@ -14,6 +14,7 @@ import {
 import {
   type CreateEventInput,
   createEventService,
+  type EventExportInput,
   type EventService,
   EventServiceError,
   type ListEventInput,
@@ -95,6 +96,39 @@ const events: FastifyPluginAsync = async (
   });
 
   fastify.withAuth(async (scope) => {
+    scope.get(
+      "/export.ics",
+      {
+        schema: {
+          summary: "Export events as iCalendar",
+          tags: ["Event"],
+          security: [{ Auth: [] }],
+          querystring: EventQuery,
+          response: {
+            200: Type.String({
+              description: "RFC 5545 iCalendar document",
+            }),
+            400: HttpError,
+          },
+        },
+      },
+      async (request, reply) => {
+        try {
+          const calendar = await service.exportIcs(
+            request.user.username,
+            request.query as EventExportInput,
+          );
+          return reply
+            .type("text/calendar; charset=utf-8")
+            .header("Content-Disposition", 'attachment; filename="events.ics"')
+            .header("Cache-Control", "private, no-store")
+            .send(calendar);
+        } catch (error) {
+          return sendServiceError(reply, error);
+        }
+      },
+    );
+
     scope.get(
       "/",
       {
