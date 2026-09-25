@@ -161,9 +161,12 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox): Promise<void
         tags: ["Event"],
         security: [{ Auth: [] }],
         body: EventBody,
-        response: { 201: EventResponse, 400: HttpError, 409: HttpError },
+        response: { 201: EventResponse, 400: HttpError, 409: HttpError, 500: HttpError },
       },
     }, async (request, reply) => {
+
+      const normalizedTitle = request.body.title.trim();
+      if (normalizedTitle.length === 0) return reply.badRequest("Invalid title in request");
 
       const startsAt = new Date(request.body.startsAt);
       const endsAt = new Date(request.body.endsAt);
@@ -176,7 +179,7 @@ const events: FastifyPluginAsync = async (fastify: FastifyTypebox): Promise<void
 
       const document = {
         owner: request.user.username,
-        title: request.body.title,
+        title: normalizedTitle,
         startsAt,
         endsAt,
         version: 1,

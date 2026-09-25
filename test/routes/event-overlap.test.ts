@@ -101,6 +101,28 @@ test.each([
   assert.equal(await app.collections.events.countDocuments({}), 2);
 });
 
+test.each(["", "   ", "\t\n"]) ("creation rejects a blank title %j", async (title) => {
+  const result = await app.inject({
+    method: "POST",
+    url: "/event/",
+    headers: { authorization: "Bearer event-test-alice" },
+    payload: { ...eventBody("12:00", "13:00"), title },
+  });
+  assert.equal(result.statusCode, 400, result.payload);
+  assert.equal(await app.collections.events.countDocuments({}), 1);
+});
+
+test("creation trims the title", async () => {
+  const result = await app.inject({
+    method: "POST",
+    url: "/event/",
+    headers: { authorization: "Bearer event-test-alice" },
+    payload: { ...eventBody("12:00", "13:00"), title: "  Planning  " },
+  });
+  assert.equal(result.statusCode, 201, result.payload);
+  assert.equal(result.json().title, "Planning");
+});
+
 test("another user's event does not block creation", async () => {
   const result = await createEvent("10:00", "11:00", "bob");
   assert.equal(result.statusCode, 201, result.payload);
