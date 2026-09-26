@@ -16,19 +16,22 @@ bun run dev
 That serves http://localhost:3000. The first run downloads an in-memory MongoDB binary, roughly 150 MB, once. After that it's cached and startup is quick. If you'd rather have persistent data:
 
 ```sh
-docker compose up -d
-cp .env.example .env
+cp .env.compose.example .env.compose
+docker compose --env-file .env.compose up -d
 ```
 
 ## Environment
 
-Everything here is optional. Copy `.env.example` to `.env` and set what you need.
+Everything here is optional. For host development, copy `.env.example` to `.env` and set what you need. For Docker Compose, copy `.env.compose.example` to `.env.compose` and pass it with `--env-file`.
 
 | Variable | What it does |
 | --- | --- |
 | `MONGO_URI` | MongoDB URI for dev. Unset means in-memory. |
 | `MONGO_TEST_URI` | Same thing, but for `bun test`. |
 | `AUTH_SKIP` | Set to `true` to turn auth off locally. |
+| `NODE_ENV` | Runtime environment; Compose defaults to `production`. |
+| `FASTIFY_ADDRESS` | Address for the Fastify server to bind to. |
+| `FASTIFY_PORT` | Port for the Fastify server to listen on. |
 
 ## Scripts
 
@@ -112,7 +115,9 @@ test/
 
 ## Tests
 
-`bun run test` runs everything. Route tests exercise each plugin on a bare Fastify instance; the Mongo test boots the whole app, plugins autoloaded and collections created, against the in-memory server unless `MONGO_TEST_URI` is set. No external services anywhere.
+`bun run test` runs everything. Route tests exercise plugins on bare Fastify instances; the event route tests and full-app smoke tests use isolated in-memory MongoDB instances. The full-app test explicitly leaves both Mongo URI options unset, so it does not connect to a database configured in `.env`. No running external service is required.
+
+See [TESTING.md](TESTING.md) for the Task 1 test cases, requirement coverage, and known test boundaries.
 
 ## Adding your own stuff
 
