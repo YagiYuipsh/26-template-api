@@ -9,6 +9,18 @@ export type EventUpdate = Partial<
 
 export type EventListFilters = { title?: string; from?: Date; to?: Date };
 
+export type EventListCursor = { startsAt: Date; id: ObjectId };
+
+export type EventListOptions = EventListFilters & {
+  limit: number;
+  cursor?: EventListCursor;
+};
+
+export type EventListPage = {
+  items: EventRecord[];
+  hasMore: boolean;
+};
+
 export interface EventRepository {
   findById(owner: string, id: string | ObjectId): Promise<EventRecord | null>;
   findOverlapping(
@@ -25,7 +37,8 @@ export interface EventRepository {
     changes: EventUpdate,
   ): Promise<EventRecord | null>;
   delete(owner: string, id: string | ObjectId): Promise<boolean>;
-  list(owner: string, filters?: EventListFilters): Promise<EventRecord[]>;
+  list(owner: string, options: EventListOptions): Promise<EventListPage>;
+  listAll(owner: string, filters?: EventListFilters): Promise<EventRecord[]>;
 }
 
 function toObjectId(id: string | ObjectId): ObjectId | null {
@@ -95,17 +108,56 @@ export function createEventRepository(
     return result.deletedCount === 1;
   }
 
-  async function list(owner: string, filters: EventListFilters = {}) {
-    const filter: Filter<EventDocument> = {
-      owner,
-      ...(filters.title === undefined
-        ? {}
-        : { title: { $regex: filters.title, $options: "i" } }),
-      ...(filters.from === undefined ? {} : { endsAt: { $gt: filters.from } }),
-      ...(filters.to === undefined ? {} : { startsAt: { $lt: filters.to } }),
-    };
-    return collection.find(filter).sort({ startsAt: 1, _id: 1 }).toArray();
+  function buildFilter(
+    owner: string,
+    filters: EventListFilters,
+    cursor?: EventListCursor,
+  ): Filter<EventDocument> {
+    const clauses: Filter<EventDocument>[] = [{ owner }];
+    if (filters.title !== undefined) {
+      clauses.push({ title: { $regex: filters.title, $options: "i" } });
+    }
+    if (filters.from !== undefined)
+      clauses.push({ endsAt: { $gt: filters.from } });
+    if (filters.to !== undefined)
+      clauses.push({ startsAt: { $lt: filters.to } });
+    if (cursor !== undefined) {
+      clauses.push({
+        $or: [
+          { startsAt: { $gt: cursor.startsAt } },
+          { startsAt: cursor.startsAt, _id: { $gt: cursor.id } },
+        ],
+      });
+    }
+    return { $and: clauses };
   }
 
-  return { findById, findOverlapping, insert, update, delete: remove, list };
+  async function list(owner: string, options: EventListOptions) {
+    const rows = await collection
+      .find(buildFilter(owner, options, options.cursor))
+      .sort({ startsAt: 1, _id: 1 })
+      .limit(options.limit + 1)
+      .toArray();
+    return {
+      items: rows.slice(0, options.limit),
+      hasMore: rows.length > options.limit,
+    };
+  }
+
+  async function listAll(owner: string, filters: EventListFilters = {}) {
+    return collection
+      .find(buildFilter(owner, filters))
+      .sort({ startsAt: 1, _id: 1 })
+      .toArray();
+  }
+
+  return {
+    findById,
+    findOverlapping,
+    insert,
+    update,
+    delete: remove,
+    list,
+    listAll,
+  };
 }

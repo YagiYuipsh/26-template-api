@@ -418,7 +418,9 @@ test.each(timeRangeCases)(
     const result = await listEvents(query);
     assert.equal(result.statusCode, 200, result.payload);
     assert.deepEqual(
-      result.json<Array<{ id: string }>>().map((event) => event.id),
+      result
+        .json<{ items: Array<{ id: string }> }>()
+        .items.map((event) => event.id),
       matches ? [existingId] : [],
     );
   },
@@ -459,7 +461,9 @@ test("time filtering includes events starting on the previous day", async () => 
   });
   assert.equal(result.statusCode, 200, result.payload);
   assert.deepEqual(
-    result.json<Array<{ id: string }>>().map((event) => event.id),
+    result
+      .json<{ items: Array<{ id: string }> }>()
+      .items.map((event) => event.id),
     [inserted.insertedId.toHexString()],
   );
 });
@@ -479,7 +483,9 @@ test("time filtering preserves owner isolation and chronological ordering", asyn
     const result = await listEvents(query);
     assert.equal(result.statusCode, 200, result.payload);
     assert.deepEqual(
-      result.json<Array<{ id: string }>>().map((event) => event.id),
+      result
+        .json<{ items: Array<{ id: string }> }>()
+        .items.map((event) => event.id),
       [earlier.json().id, existingId, later.json().id],
     );
   }
@@ -499,7 +505,9 @@ test.each(titleSearchCases)(
     const result = await listEvents({ title });
     assert.equal(result.statusCode, 200, result.payload);
     assert.deepEqual(
-      result.json<Array<{ id: string }>>().map((event) => event.id),
+      result
+        .json<{ items: Array<{ id: string }> }>()
+        .items.map((event) => event.id),
       matches ? [existingId] : [],
     );
   },
@@ -537,7 +545,9 @@ test("title search treats regular-expression characters as literal text", async 
     const result = await listEvents({ title });
     assert.equal(result.statusCode, 200, result.payload);
     assert.deepEqual(
-      result.json<Array<{ id: string }>>().map((event) => event.id),
+      result
+        .json<{ items: Array<{ id: string }> }>()
+        .items.map((event) => event.id),
       [inserted.insertedId.toHexString()],
       title,
     );
@@ -555,7 +565,9 @@ test("title search supports Chinese keywords", async () => {
   const result = await listEvents({ title: "讨论" });
   assert.equal(result.statusCode, 200, result.payload);
   assert.deepEqual(
-    result.json<Array<{ id: string }>>().map((event) => event.id),
+    result
+      .json<{ items: Array<{ id: string }> }>()
+      .items.map((event) => event.id),
     [inserted.insertedId.toHexString()],
   );
 });
@@ -582,7 +594,9 @@ test("title search combines with time filters and preserves ownership and orderi
   });
   assert.equal(result.statusCode, 200, result.payload);
   assert.deepEqual(
-    result.json<Array<{ id: string }>>().map((event) => event.id),
+    result
+      .json<{ items: Array<{ id: string }> }>()
+      .items.map((event) => event.id),
     [existingId, later.json().id],
   );
 });
@@ -654,4 +668,148 @@ test("event export escapes text and folds long UTF-8 lines", async () => {
   for (const line of result.payload.split("\r\n").filter(Boolean)) {
     assert.ok(Buffer.byteLength(line, "utf8") <= 75, line);
   }
+});
+
+test("event list uses a default limit and cursor pagination", async () => {
+  const metadata = eventMetadata();
+  await app.collections.events.insertMany(
+    [8, 9, 12, 13].map((hour) => ({
+      owner: "alice",
+      title: `Event ${hour}`,
+      startsAt: new Date(
+        `2026-09-24T${hour.toString().padStart(2, "0")}:00:00Z`,
+      ),
+      endsAt: new Date(`2026-09-24T${hour.toString().padStart(2, "0")}:30:00Z`),
+      ...metadata,
+    })),
+  );
+
+  const first = await listEvents({ limit: "2" });
+  assert.equal(first.statusCode, 200, first.payload);
+  const firstPage = first.json<{
+    items: Array<{ id: string }>;
+    nextCursor: string | null;
+  }>();
+  assert.equal(firstPage.items.length, 2);
+  assert.ok(firstPage.nextCursor);
+
+  const second = await listEvents({
+    limit: "2",
+    cursor: firstPage.nextCursor!,
+  });
+  assert.equal(second.statusCode, 200, second.payload);
+  const secondPage = second.json<{
+    items: Array<{ id: string }>;
+    nextCursor: string | null;
+  }>();
+  assert.equal(secondPage.items.length, 2);
+  assert.ok(secondPage.nextCursor);
+
+  const third = await listEvents({
+    limit: "2",
+    cursor: secondPage.nextCursor!,
+  });
+  assert.equal(third.statusCode, 200, third.payload);
+  const thirdPage = third.json<{
+    items: Array<{ id: string }>;
+    nextCursor: string | null;
+  }>();
+  assert.equal(thirdPage.items.length, 1);
+  assert.equal(thirdPage.nextCursor, null);
+  assert.equal(
+    new Set([
+      ...firstPage.items.map((event) => event.id),
+      ...secondPage.items.map((event) => event.id),
+      ...thirdPage.items.map((event) => event.id),
+    ]).size,
+    5,
+  );
+});
+
+test("event list defaults to 50 items", async () => {
+  const metadata = eventMetadata();
+  await app.collections.events.insertMany(
+    Array.from({ length: 55 }, (_, index) => ({
+      owner: "alice",
+      title: `Event ${index}`,
+      startsAt: new Date(Date.UTC(2026, 8, 1, index)),
+      endsAt: new Date(Date.UTC(2026, 8, 1, index, 30)),
+      ...metadata,
+    })),
+  );
+  const result = await listEvents();
+  assert.equal(result.statusCode, 200, result.payload);
+  const page = result.json<{ items: unknown[]; nextCursor: string | null }>();
+  assert.equal(page.items.length, 50);
+  assert.ok(page.nextCursor);
+});
+
+test("event list rejects a limit above the maximum", async () => {
+  const result = await listEvents({ limit: "101" });
+  assert.equal(result.statusCode, 400, result.payload);
+});
+
+test("event list rejects an invalid cursor", async () => {
+  const result = await listEvents({ cursor: "not-a-valid-cursor" });
+  assert.equal(result.statusCode, 400, result.payload);
+});
+
+test("event cursor uses _id to paginate equal start times", async () => {
+  const startsAt = new Date("2026-09-24T14:00:00Z");
+  const endsAt = new Date("2026-09-24T14:30:00Z");
+  await app.collections.events.insertMany(
+    ["A", "B", "C"].map((suffix) => ({
+      owner: "alice",
+      title: `Same start ${suffix}`,
+      startsAt,
+      endsAt,
+      ...eventMetadata(),
+    })),
+  );
+
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  for (let pageNumber = 0; pageNumber < 3; pageNumber += 1) {
+    const result = await listEvents({
+      title: "Same start",
+      limit: "1",
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    assert.equal(result.statusCode, 200, result.payload);
+    const page = result.json<{
+      items: Array<{ id: string }>;
+      nextCursor: string | null;
+    }>();
+    assert.equal(page.items.length, 1);
+    ids.push(page.items[0]!.id);
+    cursor = page.nextCursor ?? undefined;
+  }
+
+  assert.equal(new Set(ids).size, 3);
+  assert.equal(cursor, undefined);
+});
+
+test("event list combines filters with pagination and keeps owner isolation", async () => {
+  await app.collections.events.insertMany([
+    {
+      owner: "alice",
+      title: "Planning",
+      startsAt: new Date("2026-09-24T12:00:00Z"),
+      endsAt: new Date("2026-09-24T12:30:00Z"),
+      ...eventMetadata(),
+    },
+    {
+      owner: "bob",
+      title: "Planning",
+      startsAt: new Date("2026-09-24T12:15:00Z"),
+      endsAt: new Date("2026-09-24T12:45:00Z"),
+      ...eventMetadata(),
+    },
+  ]);
+  const result = await listEvents({ title: "plan", limit: "1" });
+  assert.equal(result.statusCode, 200, result.payload);
+  assert.equal(
+    result.json<{ items: Array<{ owner: string }> }>().items[0]?.owner,
+    "alice",
+  );
 });

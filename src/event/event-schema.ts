@@ -17,8 +17,11 @@ export const EventResponse = Type.Object(
   { $id: "EventResponse" },
 );
 
-/** Response representation of an event collection. */
-export const EventListResponse = Type.Array(EventResponse);
+/** Response representation of a paginated event collection. */
+export const EventListResponse = Type.Object({
+  items: Type.Array(EventResponse),
+  nextCursor: Type.Union([Type.String(), Type.Null()]),
+});
 
 /** Request body used when creating an event. */
 export const EventBody = Type.Object({
@@ -42,6 +45,20 @@ export const EventParams = Type.Object({ id: Type.String({ minLength: 1 }) });
 
 /** Query parameters for filtering events by title and time range. */
 export const EventQuery = Type.Object({
+  limit: Type.Optional(
+    Type.Integer({
+      minimum: 1,
+      maximum: 100,
+      default: 50,
+      description: "Maximum number of events to return (default 50, max 100).",
+    }),
+  ),
+  cursor: Type.Optional(
+    Type.String({
+      minLength: 1,
+      description: "Opaque cursor returned by the previous list response.",
+    }),
+  ),
   title: Type.Optional(
     Type.String({
       minLength: 1,

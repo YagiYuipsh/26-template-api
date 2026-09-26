@@ -70,6 +70,8 @@ function sendServiceError(
     case "INVALID_START_DATE":
     case "INVALID_END_DATE":
     case "INVALID_TIME_RANGE":
+    case "INVALID_LIMIT":
+    case "INVALID_CURSOR":
     case "NO_FIELDS_TO_UPDATE":
       return reply.badRequest(error.message);
     case "EVENT_NOT_FOUND":
@@ -133,7 +135,7 @@ const events: FastifyPluginAsync = async (
       "/",
       {
         schema: {
-          summary: "Read all events",
+          summary: "List events",
           tags: ["Event"],
           security: [{ Auth: [] }],
           querystring: EventQuery,
@@ -142,11 +144,14 @@ const events: FastifyPluginAsync = async (
       },
       async (request, reply) => {
         try {
-          const rows = await service.list(
+          const page = await service.list(
             request.user.username,
             request.query as ListEventInput,
           );
-          return rows.map(toResponse);
+          return {
+            items: page.items.map(toResponse),
+            nextCursor: page.nextCursor,
+          };
         } catch (error) {
           return sendServiceError(reply, error);
         }

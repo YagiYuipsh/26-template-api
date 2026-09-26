@@ -184,7 +184,10 @@ export default fp<InitMongoPluginOptions>(async (fastify, opts) => {
       );
     }
     const events = db.collection<EventDocument>("events");
-    await events.createIndex({ owner: 1, startsAt: 1 });
+    await events.createIndex(
+      { owner: 1, startsAt: 1, _id: 1 },
+      { name: "events_owner_startsAt_id" },
+    );
     fastify.decorate("collections", { events });
   });
 });

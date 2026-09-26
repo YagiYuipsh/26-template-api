@@ -62,7 +62,7 @@ Documents in the MongoDB `events` collection have the following shape:
 | `createdAt` | `Date` | Yes | Creation timestamp. |
 | `updatedAt` | `Date` | Yes | Timestamp of the latest update. |
 
-Startup creates the `{ owner: 1, startsAt: 1 }` index. List results are sorted by `startsAt` ascending and then `_id` ascending, giving stable ordering when events share a start time.
+Startup creates the `{ owner: 1, startsAt: 1, _id: 1 }` index. List results are sorted by `startsAt` ascending and then `_id` ascending, giving stable ordering when events share a start time and supporting cursor pagination.
 
 ### Overlap rule
 
@@ -142,8 +142,28 @@ Optional query parameters:
 | `title` | Case-insensitive substring search on the title; trimmed and limited to 1–200 characters. |
 | `from` | Includes events where `endsAt > from`. |
 | `to` | Includes events where `startsAt < to`. |
+| `limit` | Maximum number of events to return. Defaults to `50`; allowed range is `1`–`100`. |
+| `cursor` | Opaque cursor returned by the previous page. It contains the last page's `startsAt` and `_id` position. |
 
-When both `from` and `to` are supplied, `from` must be earlier than `to`. Time filtering uses interval intersection, so an event that began before the query window but continues into it is included. The response is an array sorted by start time.
+When both `from` and `to` are supplied, `from` must be earlier than `to`. Time filtering uses interval intersection, so an event that began before the query window but continues into it is included. Results are sorted by `startsAt` and `_id`.
+
+The list response is a pagination envelope:
+
+```json
+{
+  "items": [
+    {
+      "id": "66f000000000000000000001",
+      "title": "Project meeting",
+      "startsAt": "2026-09-24T10:00:00.000Z",
+      "endsAt": "2026-09-24T11:00:00.000Z"
+    }
+  ],
+  "nextCursor": "eyJzdGFydHNBdCI6IjIwMjYtMDktMjRUMTA6MDA6MDAuMDAwWiIsImlkIjoiNjZmMDAwMDAwMDAwMDAwMDAwMDAwMDEifQ"
+}
+```
+
+`nextCursor` is `null` on the final page. The service uses keyset pagination rather than `skip()`: MongoDB returns rows after `(startsAt, _id)` with the condition `startsAt > cursor.startsAt OR (startsAt = cursor.startsAt AND _id > cursor.id)`, then fetches one extra row to determine whether another page exists. The cursor is intentionally opaque to clients and should be sent with the same filters used for the previous request. Invalid cursors and invalid limits return `400`.
 
 #### `GET /event/:id` — Get one event
 
@@ -259,4 +279,5 @@ The current lock is process-local and cannot coordinate multiple API replicas.
 - Concurrent creation, concurrent PATCH requests, and stale versions.
 - Alice/Bob owner isolation.
 - Title search, time-window filtering, and stable ordering.
+- Default 50-item pages, the 100-item maximum, cursor pagination without duplicates or omissions, combined filters, and owner isolation across pages.
 - iCalendar owner filtering, text escaping, download headers, and UTF-8 line folding.

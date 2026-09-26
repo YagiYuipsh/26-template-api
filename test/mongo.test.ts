@@ -65,5 +65,5 @@ test("the app reports ready with the collections decorated", async () => {
     headers: { authorization: "Bearer alice-dev-token" },
   });
   assert.equal(events.statusCode, 200, events.payload);
-  assert.deepEqual(events.json(), []);
+  assert.deepEqual(events.json(), { items: [], nextCursor: null });
 });

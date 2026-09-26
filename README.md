@@ -53,6 +53,13 @@ Setting `AUTH_SKIP=true` turns verification off completely. Scoped requests then
 
 Swagger UI is at http://localhost:3000/documentation, Scalar at http://localhost:3000/reference.
 
+Event list requests use cursor pagination. `limit` defaults to 50 and accepts values from 1 to 100. Results are ordered by `startsAt` and `_id`; the response contains `items` and a `nextCursor`. Pass the cursor back with the same `from`, `to`, and `title` filters to read the next page. `nextCursor` is `null` when there are no more results.
+
+```sh
+curl -H "Authorization: Bearer alice-dev-token" \
+  "http://localhost:3000/event/?limit=20&title=planning"
+```
+
 ## Where things live
 
 ```
