@@ -1,8 +1,12 @@
 # USThing API and MongoDB services.
 #
-# MONGO_URI points to the MongoDB service inside the Compose network. Outside
-# production, the application falls back to an in-memory MongoDB when it is
-# unset.
+# Optional Compose environment:
+#   Copy .env.compose.example to .env.compose, then run:
+#   docker compose --env-file .env.compose up -d
+#
+# The defaults below allow `docker compose up -d` to work when no conflicting
+# project `.env` is present. MONGO_URI must use the `mongodb` service hostname
+# inside the Compose network.
 
 name: usthing
 
@@ -43,11 +47,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: production
-      FASTIFY_ADDRESS: 0.0.0.0
-      FASTIFY_PORT: 3000
-      MONGO_URI: mongodb://mongodb:27017/usthing
-      AUTH_SKIP: "false"
+      NODE_ENV: ${NODE_ENV:-production}
+      FASTIFY_ADDRESS: ${FASTIFY_ADDRESS:-0.0.0.0}
+      FASTIFY_PORT: ${FASTIFY_PORT:-3000}
+      MONGO_URI: ${MONGO_URI:-mongodb://mongodb:27017/usthing}
+      AUTH_SKIP: ${AUTH_SKIP:-false}
     depends_on:
       mongodb:
         condition: service_healthy

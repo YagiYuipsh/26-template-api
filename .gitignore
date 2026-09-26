@@ -4,6 +4,7 @@ node_modules/
 # dotenv
 .env*
 !.env.example
+!.env.compose.example
 
 # coverage
 coverage/
