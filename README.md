@@ -66,21 +66,32 @@ curl -H "Authorization: Bearer alice-dev-token" \
 src/
   app.ts                # Fastify app: options, plugins, routes
   options.ts            # Environment variable parsing
+  auth/
+    users.ts            # Users and development bearer tokens
+  event/
+    event.ts            # Event model and domain types
+    event-schema.ts     # TypeBox request and response schemas
+    event-repository.ts # MongoDB persistence and conflict queries
+    event-service.ts    # Event business rules and ownership checks
+    ical-service.ts     # iCalendar export and text folding
+    user-lock.ts        # Per-user in-process write serialization
   plugins/
     auth.ts             # Bearer-token auth plugin + withAuth scope
     init-mongo.ts       # Collections and index bootstrap
     sensible.ts         # @fastify/sensible error helpers
-  auth/
-    users.ts            # Users and tokens
   routes/
     example/            # Public example route
     auth-example/       # Protected example route
+    event/              # Authenticated event CRUD, list, and export routes
 test/
-  routes/               # Route tests
-  auth-schema.test.ts   # withAuth schema-merging contract tests
-  init-mongo.test.ts    # MongoDB URI-defaulting tests
-  mongo.test.ts         # Full-app boot + in-memory MongoDB wiring
-  options.test.ts       # Env parsing tests
+  routes/
+    event-overlap.test.ts # Event CRUD, ownership, overlap, pagination, and export
+    auth-example.test.ts  # Bearer-token and authSkip behavior
+    auth-schema.test.ts   # withAuth schema-merging contract tests
+    example.test.ts       # Public example route behavior
+  init-mongo.test.ts      # MongoDB URI-defaulting tests
+  mongo.test.ts           # Full-app boot + in-memory MongoDB wiring
+  options.test.ts         # Environment option parsing tests
 ```
 
 ## Tests
