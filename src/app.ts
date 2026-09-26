@@ -42,6 +42,8 @@ const app: FastifyPluginAsync<AppOptions> = async (
 ): Promise<void> => {
   // Place here your custom code!
 
+  fastify.get("/health", async () => ({ status: "ok" }));
+
   // Register CORS
   await fastify.register(cors, {
     origin: "*",

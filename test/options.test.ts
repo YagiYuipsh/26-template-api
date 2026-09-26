@@ -4,18 +4,18 @@ import { loadOptions } from "../src/options.js";
 describe("loadOptions", () => {
   test("loads options from an explicit env object", () => {
     const options = loadOptions({
-      MONGO_URI: "mongodb://localhost:27017/template-api-test",
-      MONGO_TEST_URI: "mongodb://localhost:27018/template-api-test",
+      MONGO_URI: "mongodb://localhost:27017/usthing-test",
+      MONGO_TEST_URI: "mongodb://localhost:27018/usthing-test",
       AUTH_SKIP: "true",
     });
 
     expect(options.pluginTimeout).toBe(5 * 60 * 1000);
     expect(options.test).toBe(false);
     expect(options.mongoUri).toBe(
-      "mongodb://localhost:27017/template-api-test",
+      "mongodb://localhost:27017/usthing-test",
     );
     expect(options.mongoTestUri).toBe(
-      "mongodb://localhost:27018/template-api-test",
+      "mongodb://localhost:27018/usthing-test",
     );
     expect(options.authSkip).toBe(true);
   });

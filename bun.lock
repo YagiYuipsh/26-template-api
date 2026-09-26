@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "template-api",
+      "name": "usthing",
       "dependencies": {
         "@fastify/autoload": "^6.5.0",
         "@fastify/cors": "^11.3.0",

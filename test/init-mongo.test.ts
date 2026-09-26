@@ -8,15 +8,15 @@ import { withDefaultMongoDatabase } from "../src/plugins/init-mongo.js";
 describe("withDefaultMongoDatabase", () => {
   test("appends the database name when none is present", () => {
     expect(
-      withDefaultMongoDatabase("mongodb://localhost:27018", "template-api"),
-    ).toBe("mongodb://localhost:27018/template-api");
+      withDefaultMongoDatabase("mongodb://localhost:27018", "usthing"),
+    ).toBe("mongodb://localhost:27018/usthing");
   });
 
   test("keeps an explicitly named database unchanged", () => {
     expect(
       withDefaultMongoDatabase(
         "mongodb://localhost:27018/other",
-        "template-api",
+        "usthing",
       ),
     ).toBe("mongodb://localhost:27018/other");
   });
