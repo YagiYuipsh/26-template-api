@@ -64,6 +64,8 @@ function sendServiceError(
   },
   error: unknown,
 ) {
+  // Keep domain errors independent from HTTP concerns; this function defines
+  // their public API status-code mapping.
   if (!(error instanceof EventServiceError)) throw error;
   switch (error.code) {
     case "INVALID_TITLE":
@@ -90,6 +92,8 @@ const events: FastifyPluginAsync = async (
 ): Promise<void> => {
   let service: EventService;
   fastify.addHook("onReady", async () => {
+    // Build the service after MongoDB collections are available and keep one
+    // UserLock instance for the lifetime of this application.
     const userLock = new UserLock();
     service = createEventService(
       createEventRepository(fastify.collections.events),

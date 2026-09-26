@@ -62,12 +62,16 @@ export function createEventRepository(
     endsAt: Date,
     excludedId?: string | ObjectId,
   ) {
+    // Events use half-open intervals: [startsAt, endsAt). This allows one
+    // event to start exactly when another event ends.
     const filter: Filter<EventDocument> = {
       owner,
       startsAt: { $lt: endsAt },
       endsAt: { $gt: startsAt },
     };
     if (excludedId !== undefined) {
+      // When updating an event, exclude the current document so it does not
+      // conflict with its own existing time range.
       const excludedObjectId = toObjectId(excludedId);
       if (excludedObjectId === null) return null;
       filter._id = { $ne: excludedObjectId };
@@ -93,6 +97,8 @@ export function createEventRepository(
   ) {
     const objectId = toObjectId(id);
     if (objectId === null) return null;
+    // Include the expected version in the MongoDB predicate so the version
+    // check and update are atomic.
     const result = await collection.updateOne(
       { _id: objectId, owner, version: expectedVersion },
       { $set: { ...changes, updatedAt: new Date() }, $inc: { version: 1 } },
@@ -122,6 +128,8 @@ export function createEventRepository(
     if (filters.to !== undefined)
       clauses.push({ startsAt: { $lt: filters.to } });
     if (cursor !== undefined) {
+      // Continue strictly after the cursor's (startsAt, _id) position. The
+      // _id tie-breaker prevents duplicates or omissions for equal start times.
       clauses.push({
         $or: [
           { startsAt: { $gt: cursor.startsAt } },
@@ -133,6 +141,8 @@ export function createEventRepository(
   }
 
   async function list(owner: string, options: EventListOptions) {
+    // Fetch one extra row so the response can indicate whether another page
+    // exists without issuing a separate count query.
     const rows = await collection
       .find(buildFilter(owner, options, options.cursor))
       .sort({ startsAt: 1, _id: 1 })

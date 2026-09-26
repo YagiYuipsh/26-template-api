@@ -17,7 +17,7 @@ export const EventResponse = Type.Object(
   { $id: "EventResponse" },
 );
 
-/** Response representation of a paginated event collection. */
+/** Response representation of a keyset-paginated event collection. */
 export const EventListResponse = Type.Object({
   items: Type.Array(EventResponse),
   nextCursor: Type.Union([Type.String(), Type.Null()]),

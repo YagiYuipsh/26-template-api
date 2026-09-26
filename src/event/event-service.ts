@@ -100,6 +100,8 @@ function throwConflict(title: string): never {
 }
 
 function escapeRegex(value: string): string {
+  // Treat the user's search text as a literal substring rather than allowing
+  // regular-expression operators to change the MongoDB query.
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
@@ -116,6 +118,8 @@ function parseLimit(value: number | undefined): number {
 
 function decodeCursor(value: string | undefined): EventListCursor | undefined {
   if (value === undefined) return undefined;
+  // Cursors are opaque base64url values at the API boundary. Validate both
+  // position fields before using them in the MongoDB keyset filter.
   try {
     const decoded = JSON.parse(
       Buffer.from(value, "base64url").toString("utf8"),
@@ -140,6 +144,8 @@ function decodeCursor(value: string | undefined): EventListCursor | undefined {
 }
 
 function encodeCursor(event: EventRecord): string {
+  // Expose only the ordering position needed to request the next page; the
+  // cursor is intentionally opaque to API clients.
   return Buffer.from(
     JSON.stringify({
       startsAt: event.startsAt.toISOString(),
@@ -200,6 +206,8 @@ export function createEventService(
 ): EventService {
   async function create(owner: string, input: CreateEventInput) {
     return userLock.run(owner, async () => {
+      // Keep overlap detection and insertion in the same per-user critical
+      // section. Otherwise, concurrent requests could both pass the check.
       const document = toCreateDocument(owner, input);
       const conflict = await repository.findOverlapping(
         owner,
@@ -260,6 +268,9 @@ export function createEventService(
       from,
       to,
     };
+    // The range filter uses interval intersection:
+    // event.endsAt > from && event.startsAt < to.
+    // The repository then applies the opaque cursor as a keyset position.
     const page = await repository.list(owner, {
       ...filters,
       limit: parseLimit(input.limit),
@@ -312,6 +323,8 @@ export function createEventService(
     input: PatchEventInput,
   ) {
     return userLock.run(owner, async () => {
+      // The client must update from the version it read. The repository repeats
+      // the version check atomically so only one concurrent update can succeed.
       const current = await get(owner, id);
       if (current.version !== input.version) {
         throw new EventServiceError(
