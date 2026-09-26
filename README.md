@@ -1,4 +1,4 @@
-# template-api
+# USThing-backend-test: Custom Event
 
 A small Fastify + TypeScript service with MongoDB built in. Bun runs it and Biome keeps it tidy. With no configuration at all, dev and tests spin up a throwaway in-memory MongoDB, so `bun install && bun run dev` is genuinely all it takes to get going.
 
@@ -47,43 +47,6 @@ Everything here is optional. For host development, copy `.env.example` to `.env`
 
 ## Auth
 
-Users and their tokens live in `src/auth/users.ts`. There are two sample users, alice and bob, and their tokens act as passwords, so replace them before deploying anything real. Protected routes want a bearer header:
-
-```sh
-curl http://localhost:3000/auth-example
-# 401 Missing Authorization Header
-
-curl -H "Authorization: Bearer alice-dev-token" http://localhost:3000/auth-example
-# alice
-```
-
-To protect your own routes, wrap them in a `fastify.withAuth` scope. Everything inside is protected, the auth error responses get documented for you, and `request.user` is typed non-null:
-
-```typescript
-const authExample: FastifyPluginAsync = async (
-  fastify: FastifyTypebox,
-): Promise<void> => {
-  fastify.withAuth(async (fastify) => {
-    fastify.get(
-      "/",
-      {
-        schema: {
-          summary: "Auth Example",
-          tags: ["Auth"],
-          security: [{ Auth: [] }],
-          response: {
-            200: Type.String({
-              description: "The authenticated user's username.",
-            }),
-          },
-        },
-      },
-      async (request) => request.user.username,
-    );
-  });
-};
-```
-
 Setting `AUTH_SKIP=true` turns verification off completely. Scoped requests then come in as a fixed anonymous user (`{ username: "anonymous", name: null }`, plus an `X-Auth-Skip: true` response header), and stale tokens in your HTTP client stop causing mystery 401s.
 
 ## API docs
@@ -118,7 +81,3 @@ test/
 `bun run test` runs everything. Route tests exercise plugins on bare Fastify instances; the event route tests and full-app smoke tests use isolated in-memory MongoDB instances. The full-app test explicitly leaves both Mongo URI options unset, so it does not connect to a database configured in `.env`. No running external service is required.
 
 See [TESTING.md](TESTING.md) for the Task 1 test cases, requirement coverage, and known test boundaries.
-
-## Adding your own stuff
-
-New routes go in a folder under `src/routes/`; the autoload picks them up, and an exported `autoPrefix` controls the URL prefix if you want one. New collections and their indexes go in `src/plugins/init-mongo.ts`, following the `example` pattern, and show up as `fastify.collections.<name>`.
