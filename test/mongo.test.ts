@@ -55,4 +55,15 @@ test("the app reports ready with the collections decorated", async () => {
 
   assert.ok(app.collections);
   assert.ok(typeof app.withAuth === "function");
+
+  const health = await app.inject({ url: "/health" });
+  assert.equal(health.statusCode, 200);
+  assert.deepEqual(health.json(), { status: "ok" });
+
+  const events = await app.inject({
+    url: "/event/",
+    headers: { authorization: "Bearer alice-dev-token" },
+  });
+  assert.equal(events.statusCode, 200, events.payload);
+  assert.deepEqual(events.json(), []);
 });

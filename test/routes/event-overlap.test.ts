@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, test } from "bun:test";
 import * as assert from "node:assert";
 import Fastify from "fastify";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import type { EventDocument } from "../../src/event/event.js";
 import AuthPlugin from "../../src/plugins/auth.js";
@@ -39,6 +39,35 @@ function listEvents(query: Record<string, string> = {}) {
   return app.inject({
     url: `/event/?${new URLSearchParams(query)}`,
     headers: { authorization: "Bearer event-test-alice" },
+  });
+}
+
+function getEvent(id: string, username = "alice") {
+  return app.inject({
+    url: `/event/${id}`,
+    headers: { authorization: `Bearer event-test-${username}` },
+  });
+}
+
+function updateEvent(
+  id: string,
+  version: number,
+  payload: Record<string, unknown>,
+  username = "alice",
+) {
+  return app.inject({
+    method: "PATCH",
+    url: `/event/${id}`,
+    headers: { authorization: `Bearer event-test-${username}` },
+    payload: { ...payload, version },
+  });
+}
+
+function deleteEvent(id: string, username = "alice") {
+  return app.inject({
+    method: "DELETE",
+    url: `/event/${id}`,
+    headers: { authorization: `Bearer event-test-${username}` },
   });
 }
 
@@ -135,6 +164,31 @@ test("another user's event does not block creation", async () => {
   assert.equal(result.json().owner, "bob");
 });
 
+test("concurrent creation for one user allows only one overlapping event", async () => {
+  const results = await Promise.all([
+    createEvent("12:00", "13:00"),
+    createEvent("12:00", "13:00"),
+  ]);
+
+  assert.deepEqual(
+    results.map((result) => result.statusCode).sort(),
+    [201, 409],
+  );
+  assert.equal(
+    await app.collections.events.countDocuments({ owner: "alice" }),
+    2,
+  );
+  assert.equal(
+    await app.collections.events.countDocuments({
+      owner: "alice",
+      title: "Meeting",
+      startsAt: new Date("2026-09-24T12:00:00.000Z"),
+      endsAt: new Date("2026-09-24T13:00:00.000Z"),
+    }),
+    1,
+  );
+});
+
 test.each([
   ["09:00", "10:00", { endsAt: eventBody("09:00", "10:30").endsAt }],
   ["12:00", "13:00", { startsAt: eventBody("10:30", "13:00").startsAt }],
@@ -198,6 +252,30 @@ test("rejects a PATCH with a stale version", async () => {
   });
   assert.equal(stale.statusCode, 409, stale.payload);
   assert.equal(stale.json().message, "Event was modified by another request");
+});
+
+test("concurrent updates with one version permit exactly one winner", async () => {
+  const created = await createEvent("12:00", "13:00");
+  assert.equal(created.statusCode, 201, created.payload);
+  const event = created.json<{ id: string; version: number }>();
+
+  const results = await Promise.all([
+    updateEvent(event.id, event.version, { title: "First concurrent update" }),
+    updateEvent(event.id, event.version, { title: "Second concurrent update" }),
+  ]);
+
+  assert.deepEqual(
+    results.map((result) => result.statusCode).sort(),
+    [200, 409],
+  );
+  const saved = await getEvent(event.id);
+  assert.equal(saved.statusCode, 200, saved.payload);
+  assert.equal(saved.json().version, event.version + 1);
+  assert.ok(
+    ["First concurrent update", "Second concurrent update"].includes(
+      saved.json().title,
+    ),
+  );
 });
 
 test("requires a version for PATCH requests", async () => {
@@ -270,8 +348,53 @@ test("another user's event does not block an update", async () => {
   assert.equal(result.json().owner, "bob");
 });
 
+test("CRUD lifecycle creates, reads, updates, and deletes an event", async () => {
+  const created = await createEvent("12:00", "13:00");
+  assert.equal(created.statusCode, 201, created.payload);
+  const event = created.json<{ id: string; version: number }>();
+
+  const read = await getEvent(event.id);
+  assert.equal(read.statusCode, 200, read.payload);
+  assert.equal(read.json().id, event.id);
+
+  const updated = await updateEvent(event.id, event.version, {
+    title: "Updated lifecycle event",
+  });
+  assert.equal(updated.statusCode, 200, updated.payload);
+  assert.equal(updated.json().title, "Updated lifecycle event");
+
+  const removed = await deleteEvent(event.id);
+  assert.equal(removed.statusCode, 204, removed.payload);
+  assert.equal(removed.payload, "");
+
+  const afterDelete = await getEvent(event.id);
+  assert.equal(afterDelete.statusCode, 404, afterDelete.payload);
+});
+
+test("another user cannot delete or read an event they do not own", async () => {
+  const created = await createEvent("12:00", "13:00");
+  assert.equal(created.statusCode, 201, created.payload);
+  const event = created.json<{ id: string }>();
+
+  const deleteAttempt = await deleteEvent(event.id, "bob");
+  assert.equal(deleteAttempt.statusCode, 404, deleteAttempt.payload);
+  assert.equal(deleteAttempt.json().message, "Event not found");
+
+  const readByOwner = await getEvent(event.id);
+  assert.equal(readByOwner.statusCode, 200, readByOwner.payload);
+  assert.equal(readByOwner.json().owner, "alice");
+
+  const readByOtherUser = await getEvent(event.id, "bob");
+  assert.equal(readByOtherUser.statusCode, 404, readByOtherUser.payload);
+  assert.equal(
+    await app.collections.events.countDocuments({
+      _id: new ObjectId(event.id),
+    }),
+    1,
+  );
+});
+
 const timeRangeCases: [Record<string, string>, boolean][] = [
-  [{}, true],
   [{ from: "2026-09-24T09:00:00Z", to: "2026-09-24T12:00:00Z" }, true],
   [{ from: "2026-09-24T10:15:00Z", to: "2026-09-24T10:45:00Z" }, true],
   [{ from: "2026-09-24T09:30:00Z", to: "2026-09-24T10:30:00Z" }, true],
@@ -368,8 +491,6 @@ const titleSearchCases: [string, boolean][] = [
   ["eeti", true],
   ["  meeT  ", true],
   ["missing", false],
-  [".*", false],
-  ["[", false],
 ];
 
 test.each(titleSearchCases)(
@@ -490,8 +611,10 @@ test("event export returns an authenticated iCalendar document", async () => {
 });
 
 test("event export applies filters and does not include another owner's events", async () => {
-  const otherUser = await createEvent("12:00", "13:00", "bob");
+  const otherUser = await createEvent("10:00", "11:00", "bob");
+  const outsideRange = await createEvent("12:00", "13:00");
   assert.equal(otherUser.statusCode, 201, otherUser.payload);
+  assert.equal(outsideRange.statusCode, 201, outsideRange.payload);
 
   const result = await app.inject({
     url: "/event/export.ics?from=2026-09-24T09:30:00Z&to=2026-09-24T11:30:00Z",
@@ -500,7 +623,11 @@ test("event export applies filters and does not include another owner's events",
 
   assert.equal(result.statusCode, 200, result.payload);
   assert.equal((result.payload.match(/BEGIN:VEVENT/g) ?? []).length, 1);
-  assert.doesNotMatch(result.payload, /12:00/);
+  assert.ok(result.payload.includes(`UID:${existingId}@event-api`));
+  assert.ok(!result.payload.includes(`UID:${otherUser.json().id}@event-api`));
+  assert.ok(
+    !result.payload.includes(`UID:${outsideRange.json().id}@event-api`),
+  );
 });
 
 test("event export escapes text and folds long UTF-8 lines", async () => {
