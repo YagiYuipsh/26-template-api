@@ -14,10 +14,7 @@ describe("withDefaultMongoDatabase", () => {
 
   test("keeps an explicitly named database unchanged", () => {
     expect(
-      withDefaultMongoDatabase(
-        "mongodb://localhost:27018/other",
-        "usthing",
-      ),
+      withDefaultMongoDatabase("mongodb://localhost:27018/other", "usthing"),
     ).toBe("mongodb://localhost:27018/other");
   });
 

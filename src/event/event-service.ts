@@ -1,12 +1,12 @@
 import type { ObjectId } from "mongodb";
 import type { EventDocument } from "./event.js";
-import { serializeIcs } from "./ical-service.js";
 import type {
   EventListFilters,
   EventRecord,
   EventRepository,
   EventUpdate,
 } from "./event-repository.js";
+import { serializeIcs } from "./ical-service.js";
 import { UserLock } from "./user-lock.js";
 
 export type CreateEventInput = {

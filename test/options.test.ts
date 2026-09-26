@@ -11,12 +11,8 @@ describe("loadOptions", () => {
 
     expect(options.pluginTimeout).toBe(5 * 60 * 1000);
     expect(options.test).toBe(false);
-    expect(options.mongoUri).toBe(
-      "mongodb://localhost:27017/usthing-test",
-    );
-    expect(options.mongoTestUri).toBe(
-      "mongodb://localhost:27018/usthing-test",
-    );
+    expect(options.mongoUri).toBe("mongodb://localhost:27017/usthing-test");
+    expect(options.mongoTestUri).toBe("mongodb://localhost:27018/usthing-test");
     expect(options.authSkip).toBe(true);
   });
 

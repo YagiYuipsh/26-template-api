@@ -1,9 +1,9 @@
 import mongodb from "@fastify/mongodb";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
-import type { Collection, Document } from "mongodb";
+import type { Collection } from "mongodb";
 import packageJson from "../../package.json" with { type: "json" };
-import type { EventDocument } from "../event/event"
+import type { EventDocument } from "../event/event";
 
 /**
  * Options for {@link resolveMongoUri} and {@link mongoPlugin}.

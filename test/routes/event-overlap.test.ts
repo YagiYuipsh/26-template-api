@@ -85,12 +85,15 @@ test.each([
   ["10:15", "10:45"],
   ["09:00", "12:00"],
   ["10:00", "11:00"],
-])("creation rejects overlapping interval %s–%s without inserting", async (start, end) => {
-  const result = await createEvent(start, end);
-  assert.equal(result.statusCode, 409, result.payload);
-  assert.equal(result.json().message, "This time overlaps with Meeting");
-  assert.equal(await app.collections.events.countDocuments({}), 1);
-});
+])(
+  "creation rejects overlapping interval %s–%s without inserting",
+  async (start, end) => {
+    const result = await createEvent(start, end);
+    assert.equal(result.statusCode, 409, result.payload);
+    assert.equal(result.json().message, "This time overlaps with Meeting");
+    assert.equal(await app.collections.events.countDocuments({}), 1);
+  },
+);
 
 test.each([
   ["09:00", "10:00"],
@@ -101,16 +104,19 @@ test.each([
   assert.equal(await app.collections.events.countDocuments({}), 2);
 });
 
-test.each(["", "   ", "\t\n"]) ("creation rejects a blank title %j", async (title) => {
-  const result = await app.inject({
-    method: "POST",
-    url: "/event/",
-    headers: { authorization: "Bearer event-test-alice" },
-    payload: { ...eventBody("12:00", "13:00"), title },
-  });
-  assert.equal(result.statusCode, 400, result.payload);
-  assert.equal(await app.collections.events.countDocuments({}), 1);
-});
+test.each(["", "   ", "\t\n"])(
+  "creation rejects a blank title %j",
+  async (title) => {
+    const result = await app.inject({
+      method: "POST",
+      url: "/event/",
+      headers: { authorization: "Bearer event-test-alice" },
+      payload: { ...eventBody("12:00", "13:00"), title },
+    });
+    assert.equal(result.statusCode, 400, result.payload);
+    assert.equal(await app.collections.events.countDocuments({}), 1);
+  },
+);
 
 test("creation trims the title", async () => {
   const result = await app.inject({
@@ -132,24 +138,27 @@ test("another user's event does not block creation", async () => {
 test.each([
   ["09:00", "10:00", { endsAt: eventBody("09:00", "10:30").endsAt }],
   ["12:00", "13:00", { startsAt: eventBody("10:30", "13:00").startsAt }],
-])("partial time updates reject overlaps for %s–%s without changing the event", async (start, end, payload) => {
-  const created = await createEvent(start, end);
-  assert.equal(created.statusCode, 201, created.payload);
-  const result = await app.inject({
-    method: "PATCH",
-    url: `/event/${created.json().id}`,
-    headers: { authorization: "Bearer event-test-alice" },
-    payload: { ...payload, version: created.json().version },
-  });
-  assert.equal(result.statusCode, 409, result.payload);
-  assert.equal(result.json().message, "This time overlaps with Meeting");
-  const saved = await app.inject({
-    url: `/event/${created.json().id}`,
-    headers: { authorization: "Bearer event-test-alice" },
-  });
-  assert.equal(saved.statusCode, 200, saved.payload);
-  assert.deepEqual(saved.json(), created.json());
-});
+])(
+  "partial time updates reject overlaps for %s–%s without changing the event",
+  async (start, end, payload) => {
+    const created = await createEvent(start, end);
+    assert.equal(created.statusCode, 201, created.payload);
+    const result = await app.inject({
+      method: "PATCH",
+      url: `/event/${created.json().id}`,
+      headers: { authorization: "Bearer event-test-alice" },
+      payload: { ...payload, version: created.json().version },
+    });
+    assert.equal(result.statusCode, 409, result.payload);
+    assert.equal(result.json().message, "This time overlaps with Meeting");
+    const saved = await app.inject({
+      url: `/event/${created.json().id}`,
+      headers: { authorization: "Bearer event-test-alice" },
+    });
+    assert.equal(saved.statusCode, 200, saved.payload);
+    assert.deepEqual(saved.json(), created.json());
+  },
+);
 
 test("updating an event excludes itself from the conflict check", async () => {
   const before = await app.inject({
@@ -234,7 +243,11 @@ test("ignores a whitespace-only title when updating another field", async () => 
     method: "PATCH",
     url: `/event/${existingId}`,
     headers: { authorization: "Bearer event-test-alice" },
-    payload: { version: before.json().version, title: "   ", venue: "Room 101" },
+    payload: {
+      version: before.json().version,
+      title: "   ",
+      venue: "Room 101",
+    },
   });
   assert.equal(result.statusCode, 200, result.payload);
   assert.equal(result.json().title, "Meeting");
@@ -248,7 +261,10 @@ test("another user's event does not block an update", async () => {
     method: "PATCH",
     url: `/event/${created.json().id}`,
     headers: { authorization: "Bearer event-test-bob" },
-    payload: { ...eventBody("10:00", "11:00"), version: created.json().version },
+    payload: {
+      ...eventBody("10:00", "11:00"),
+      version: created.json().version,
+    },
   });
   assert.equal(result.statusCode, 200, result.payload);
   assert.equal(result.json().owner, "bob");
@@ -267,17 +283,23 @@ const timeRangeCases: [Record<string, string>, boolean][] = [
   [{ to: "2026-09-24T10:30:00Z" }, true],
   [{ to: "2026-09-24T10:00:00Z" }, false],
   [{ from: "2026-09-25T00:00:00Z", to: "2026-09-26T00:00:00Z" }, false],
-  [{ from: "2026-09-24T18:00:00+08:00", to: "2026-09-24T19:00:00+08:00" }, true],
+  [
+    { from: "2026-09-24T18:00:00+08:00", to: "2026-09-24T19:00:00+08:00" },
+    true,
+  ],
 ];
 
-test.each(timeRangeCases)("event list filters by time range %j", async (query, matches) => {
-  const result = await listEvents(query);
-  assert.equal(result.statusCode, 200, result.payload);
-  assert.deepEqual(
-    result.json<Array<{ id: string }>>().map((event) => event.id),
-    matches ? [existingId] : [],
-  );
-});
+test.each(timeRangeCases)(
+  "event list filters by time range %j",
+  async (query, matches) => {
+    const result = await listEvents(query);
+    assert.equal(result.statusCode, 200, result.payload);
+    assert.deepEqual(
+      result.json<Array<{ id: string }>>().map((event) => event.id),
+      matches ? [existingId] : [],
+    );
+  },
+);
 
 const invalidTimeRanges: Record<string, string>[] = [
   { from: "not-a-date" },
@@ -291,11 +313,14 @@ const invalidTimeRanges: Record<string, string>[] = [
   { to: "2026-06-30T23:59:60Z" },
 ];
 
-test.each(invalidTimeRanges)("event list rejects invalid time range %j", async (query) => {
-  const result = await listEvents(query);
-  assert.equal(result.statusCode, 400, result.payload);
-  assert.equal(result.json().statusCode, 400);
-});
+test.each(invalidTimeRanges)(
+  "event list rejects invalid time range %j",
+  async (query) => {
+    const result = await listEvents(query);
+    assert.equal(result.statusCode, 400, result.payload);
+    assert.equal(result.json().statusCode, 400);
+  },
+);
 
 test("time filtering includes events starting on the previous day", async () => {
   const inserted = await app.collections.events.insertOne({
@@ -324,7 +349,10 @@ test("time filtering preserves owner isolation and chronological ordering", asyn
     assert.equal(created.statusCode, 201, created.payload);
   }
 
-  for (const query of [{}, { from: "2026-09-24T00:00:00Z", to: "2026-09-25T00:00:00Z" }] as Record<string, string>[]) {
+  for (const query of [
+    {},
+    { from: "2026-09-24T00:00:00Z", to: "2026-09-25T00:00:00Z" },
+  ] as Record<string, string>[]) {
     const result = await listEvents(query);
     assert.equal(result.statusCode, 200, result.payload);
     assert.deepEqual(
@@ -344,20 +372,26 @@ const titleSearchCases: [string, boolean][] = [
   ["[", false],
 ];
 
-test.each(titleSearchCases)("event list searches titles containing %s", async (title, matches) => {
-  const result = await listEvents({ title });
-  assert.equal(result.statusCode, 200, result.payload);
-  assert.deepEqual(
-    result.json<Array<{ id: string }>>().map((event) => event.id),
-    matches ? [existingId] : [],
-  );
-});
+test.each(titleSearchCases)(
+  "event list searches titles containing %s",
+  async (title, matches) => {
+    const result = await listEvents({ title });
+    assert.equal(result.statusCode, 200, result.payload);
+    assert.deepEqual(
+      result.json<Array<{ id: string }>>().map((event) => event.id),
+      matches ? [existingId] : [],
+    );
+  },
+);
 
-test.each(["", "   ", "x".repeat(201)])("event list rejects invalid title search %s", async (title) => {
-  const result = await listEvents({ title });
-  assert.equal(result.statusCode, 400, result.payload);
-  assert.equal(result.json().statusCode, 400);
-});
+test.each(["", "   ", "x".repeat(201)])(
+  "event list rejects invalid title search %s",
+  async (title) => {
+    const result = await listEvents({ title });
+    assert.equal(result.statusCode, 400, result.payload);
+    assert.equal(result.json().statusCode, 400);
+  },
+);
 
 test("title search treats regular-expression characters as literal text", async () => {
   const inserted = await app.collections.events.insertOne({
@@ -367,7 +401,18 @@ test("title search treats regular-expression characters as literal text", async 
     endsAt: new Date("2026-09-24T13:00:00Z"),
     ...eventMetadata(),
   });
-  for (const title of [".*", "[team]", "(draft)", "C++", "$5", "^start", "?", "{2}", "A|B", "C:\\Temp"]) {
+  for (const title of [
+    ".*",
+    "[team]",
+    "(draft)",
+    "C++",
+    "$5",
+    "^start",
+    "?",
+    "{2}",
+    "A|B",
+    "C:\\Temp",
+  ]) {
     const result = await listEvents({ title });
     assert.equal(result.statusCode, 200, result.payload);
     assert.deepEqual(
@@ -428,8 +473,14 @@ test("event export returns an authenticated iCalendar document", async () => {
   });
 
   assert.equal(result.statusCode, 200, result.payload);
-  assert.match(result.headers["content-type"] ?? "", /^text\/calendar; charset=utf-8/);
-  assert.equal(result.headers["content-disposition"], 'attachment; filename="events.ics"');
+  assert.match(
+    result.headers["content-type"] ?? "",
+    /^text\/calendar; charset=utf-8/,
+  );
+  assert.equal(
+    result.headers["content-disposition"],
+    'attachment; filename="events.ics"',
+  );
   assert.match(result.payload, /^BEGIN:VCALENDAR\r\n/);
   assert.match(result.payload, /PRODID:-\/\/USThing\/\/EVENT API\/\/EN\r\n/);
   assert.match(result.payload, /UID:[a-f0-9]{24}@event-api\r\n/);
